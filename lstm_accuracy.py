@@ -4,7 +4,7 @@ from utils import *
 
 dataset = "../data/smaller"
 max_len = 10
-output_file = "../mlp_out/predict_smaller.npy"
+output_file = "../lstm_out/predict_smaller.npy"
 
 ## predicted results
 test_predict = np.load(output_file)

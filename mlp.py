@@ -51,7 +51,7 @@ class MLP(object):
 
         ## cross entropy loss
         xm.p = f.softMax(xm.o2)
-        xm.loss = f.crossEnt((xm.p, xm.y))
+        xm.loss = f.crossEnt(xm.p, xm.y)
         xm.output = f.predict(xm.p)
 
         return xm.setup()
@@ -177,7 +177,7 @@ def main(params):
         val_loss = ad.eval(wengart_list, value_dict)["loss"] / val_num
         val_losses += [val_loss]
         # print ("calculated loss on %d validating samples" % val_num)
-        
+
         ## save the best model
         if (min_val_loss is None) or val_loss < min_val_loss:
             best_value_dict = value_dict
@@ -216,10 +216,10 @@ if __name__=='__main__':
     ## training
     (training_time, val_losses, test_loss) = main(params)
 
-    ## save validating loss and training time
-    basename = params["output_file"].split(".npy")[0]
-    np.savetxt(basename+"_val_loss.txt", val_losses)
-    np.savetxt(basename+"_ trainig_time.txt", training_time)
+    # ## save validating loss and training time
+    # basename = params["output_file"].split(".npy")[0]
+    # np.savetxt(basename+"_val_loss.txt", val_losses)
+    # np.savetxt(basename+"_ trainig_time.txt", training_time)
 
     #####################
     # for testing and debugging

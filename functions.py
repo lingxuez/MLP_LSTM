@@ -1,5 +1,6 @@
 # some useful functions
 import numpy as np
+from scipy.special import expit
 from xman import *
 
 
@@ -16,8 +17,8 @@ class f(XManFunctions):
         return XManFunctions.registerDefinedByOperator('relu', a)
 
     @staticmethod
-    def crossEnt(a):
-        return XManFunctions.registerDefinedByOperator('crossEnt', *a)
+    def crossEnt(p, y):
+        return XManFunctions.registerDefinedByOperator('crossEnt', p, y)
 
     @staticmethod
     def softMax(a):
@@ -27,6 +28,22 @@ class f(XManFunctions):
     def predict(a):
         return XManFunctions.registerDefinedByOperator('predict', a)
 
+    @staticmethod
+    def sigmoid(a):
+        return XManFunctions.registerDefinedByOperator('sigmoid', a)
+
+    @staticmethod
+    def tanh(a):
+        return XManFunctions.registerDefinedByOperator('tanh', a)
+
+    @staticmethod
+    def ele_mul(x1, x2):
+        return XManFunctions.registerDefinedByOperator('ele_mul', x1, x2)
+
+    @staticmethod
+    def tri_add(x1, x2, x3):
+        return XManFunctions.registerDefinedByOperator('tri_add', x1, x2, x3)
+
     ## when add a new operator here, also need to add to EVAL_FUNS and BP_FUNS
 
 
@@ -34,7 +51,8 @@ class f(XManFunctions):
 # to be called with the functions actual inputs as arguments
 EVAL_FUNS = {
     ## note that x1, x2 can be arrays with same shape
-    'add':      lambda x1,x2: x1+x2, 
+    'add':      lambda x1,x2: x1+x2,
+    'tri_add': lambda x1,x2,x3: x1+x2+x3, 
     'subtract': lambda x1,x2: x1-x2,
     'mul': lambda x1,x2: x1.dot(x2),
     ## element-wise squre 
@@ -47,7 +65,13 @@ EVAL_FUNS = {
     ## relu is applied element wise 
     'relu': lambda x: np.multiply(x, np.greater(x, 0)),
     ## for each row of p (one sample), find the index of maxima
-    'predict': lambda p: np.argmax(p, axis=1)
+    'predict': lambda p: np.argmax(p, axis=1),
+    ## element-wise sigmoid
+    'sigmoid': lambda x: expit(x),
+    ## element-wise tanh
+    'tanh': lambda x: np.tanh(x),
+    ## element-wise multiply
+    'ele_mul': lambda x1,x2: np.multiply(x1, x2)
     }
 
 # the functions that autograd.bprop will use in reverse mode
@@ -65,7 +89,7 @@ EVAL_FUNS = {
 
 def _derivAdd(delta,x):
     # This is for XW + b, where the output is N-by-d after broadcasting
-    # but when computing the gradient of b, we only want d-by-1
+    # but when computing the gradient of b, we only want 1-by-d
     if delta.shape!=x.shape:
         # broadcast, sum along axis=0
         if delta.shape[1]!=x.shape[1]:
@@ -76,6 +100,9 @@ def _derivAdd(delta,x):
 
 BP_FUNS = {
     'add': [lambda delta,out,x1,x2: _derivAdd(delta,x1), lambda delta,out,x1,x2: _derivAdd(delta,x2)],
+    'tri_add': [lambda delta,out,x1,x2,x3: _derivAdd(delta,x1),
+                lambda delta,out,x1,x2,x3: _derivAdd(delta,x2),
+                lambda delta,out,x1,x2,x3: _derivAdd(delta,x3)],
     'subtract': [lambda delta,out,x1,x2: _derivAdd(delta,x1), lambda delta,out,x1,x2: -_derivAdd(delta,x2)],
     'square': [lambda delta,out,x : delta * 2.0 * x],
     'mul': [lambda delta,out,x1,x2: np.dot(delta, x2.transpose()), 
@@ -83,5 +110,8 @@ BP_FUNS = {
     ## crossEnt(softMax(o), y)
     'crossEnt-softMax':  [lambda delta,out,o,y: -(y-EVAL_FUNS["softMax"](o)), 
                         lambda delta,out,o,y: -np.log(EVAL_FUNS["softMax"](o))],
-    'relu': [lambda delta,out,x: np.multiply(delta, np.greater(x, 0))]
+    'relu': [lambda delta,out,x: np.multiply(delta, np.greater(x, 0))],
+    'sigmoid': [lambda delta,out,x: np.multiply(out, 1-out)],
+    'tanh': [lambda delta,out,x: 1 - np.square(out)],
+    'ele_mul': [lambda delta,out,x1,x2: x2, lambda delta,out,x1,x2: x1]
     }
