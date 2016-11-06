@@ -49,6 +49,9 @@ class f(XManFunctions):
 
 # the functions that autograd.eval will use to evaluate each function,
 # to be called with the functions actual inputs as arguments
+P_MIN = 1e-10
+P_MAX = 1
+
 EVAL_FUNS = {
     ## note that x1, x2 can be arrays with same shape
     'add':      lambda x1,x2: x1+x2,
@@ -59,9 +62,11 @@ EVAL_FUNS = {
     'square':  lambda x: np.square(x),
     ## p, y are arrays with same shape; rows are samples
     ## y is one-hot representation
-    'crossEnt': lambda p,y: -np.sum(np.multiply(y, np.log(p))),
+    'crossEnt': lambda p,y: -np.sum(np.multiply(y, np.log(np.clip(p, P_MIN, P_MAX)))),
     ## x: rows are samples; soft-max is applied row-wise
-    'softMax': lambda x: np.exp(x) / np.sum(np.exp(x), axis=1)[:, np.newaxis],
+    'softMax': lambda x: np.clip(np.exp(x-np.max(x)) / \
+                    np.sum(np.exp(x-np.max(x)), axis=1)[:, np.newaxis],
+                    P_MIN, P_MAX),
     ## relu is applied element wise 
     'relu': lambda x: np.multiply(x, np.greater(x, 0)),
     ## for each row of p (one sample), find the index of maxima
@@ -109,7 +114,7 @@ BP_FUNS = {
                         lambda delta,out,x1,x2: np.dot(x1.transpose(), delta)],
     ## crossEnt(softMax(o), y)
     'crossEnt-softMax':  [lambda delta,out,o,y: -(y-EVAL_FUNS["softMax"](o)), 
-                        lambda delta,out,o,y: -np.log(EVAL_FUNS["softMax"](o))],
+                        lambda delta,out,o,y: -np.log(np.clip(EVAL_FUNS["softMax"](o), P_MIN, P_MAX))],
     'relu': [lambda delta,out,x: np.multiply(delta, np.greater(x, 0))],
     'sigmoid': [lambda delta,out,x: np.multiply(out, 1-out)],
     'tanh': [lambda delta,out,x: 1 - np.square(out)],

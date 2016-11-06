@@ -7,7 +7,8 @@ max_len = 10
 output_file = "../mlp_out/predict_smaller.npy"
 
 ## predicted results
-test_predict = np.load(output_file)
+test_output = np.load(output_file)
+test_predict = np.argmax(test_output, axis=1)
 
 ## true results
 dp = DataPreprocessor()

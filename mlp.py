@@ -50,9 +50,9 @@ class MLP(object):
         xm.o2 = f.relu(f.mul(xm.o1, xm.W2) + xm.b2)
 
         ## cross entropy loss
-        xm.p = f.softMax(xm.o2)
-        xm.loss = f.crossEnt(xm.p, xm.y)
-        xm.output = f.predict(xm.p)
+        xm.output = f.softMax(xm.o2)
+        xm.loss = f.crossEnt(xm.output, xm.y)
+        # xm.output = f.predict(xm.p)
 
         return xm.setup()
 
@@ -185,21 +185,22 @@ def main(params):
     print "done"
 
     ## predict on the test set using the best parameters
-    output_wengart_list = mlp.my_xman.operationSequence(mlp.my_xman.output)
+    # output_wengart_list = mlp.my_xman.operationSequence(mlp.my_xman.output)
     test_num = len(data.test)
     ## data
     (idxs,e,l) = mb_test.next()
     best_value_dict["x"] = e.reshape(test_num, max_len*num_chars)
     best_value_dict["y"] = l
     ## loss
-    test_loss = ad.eval(output_wengart_list, best_value_dict)["loss"] / test_num
-    test_predict = list(ad.eval(output_wengart_list, best_value_dict)["output"])
+    best_value_dict = ad.eval(wengart_list, best_value_dict)
+    test_loss = best_value_dict["loss"] / test_num
+    test_output = best_value_dict["output"]
     # print ("predicted labels on %d testing samples" % test_num)
 
     ## save predicted probabilities on test set
-    np.save(output_file, test_predict)
+    np.save(output_file, test_output)
 
-    return (training_time, val_losses, test_loss)
+    # return (training_time, val_losses, test_loss)
 
 
 if __name__=='__main__':
@@ -212,9 +213,11 @@ if __name__=='__main__':
     parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.05)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
     params = vars(parser.parse_args())
+    main(params)
 
     ## training
-    (training_time, val_losses, test_loss) = main(params)
+
+    # (training_time, val_losses, test_loss) = main(params)
 
     # ## save validating loss and training time
     # basename = params["output_file"].split(".npy")[0]

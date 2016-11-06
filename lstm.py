@@ -81,8 +81,8 @@ class LSTM(object):
         ## hidden states and gates; we have one hidden state per sample
         xm.f, xm.i, xm.cnew, xm.o = [], [], [], [] 
         ## initialize the first hidden state and cell state
-        xm.h = [f.input(name="h0", default=np.zeros((nsample, num_hid)))]
-        xm.c = [f.input(name="c0", default=np.zeros((nsample, num_hid)))]
+        xm.h = [f.input(name="h0", default=0.1*np.ones((nsample, num_hid)))]
+        xm.c = [f.input(name="c0", default=0.1*np.ones((nsample, num_hid)))]
         ## LSTM
         for t in xrange(max_len):
             xm.f += [f.sigmoid(f.tri_add(xm.bf, 
@@ -98,11 +98,11 @@ class LSTM(object):
 
         ## output
         xm.o2 = f.relu(f.mul(xm.h[max_len], xm.W2) + xm.b2)
-        xm.p = f.softMax(xm.o2)
-        xm.loss = f.crossEnt(xm.p, xm.y)
-        xm.output = f.predict(xm.p)
+        xm.output = f.softMax(xm.o2)
+        xm.loss = f.crossEnt(xm.output, xm.y)
+        # xm.output = f.predict(xm.p)
         return xm.setup()
-# 
+ 
     def checkGradient(self, eps=1e-4, tol=1e-4):
         """
         Check gradient implementation with numeric gradient.
@@ -202,8 +202,8 @@ def main(params):
             num_train += cur_batch_size
             value_dict["x"] = np.swapaxes(e, 0, 1)
             value_dict["y"] = l
-            value_dict["h0"] = np.zeros((cur_batch_size, num_hid))
-            value_dict["c0"] = np.zeros((cur_batch_size, num_hid))
+            value_dict["h0"] = 0.1*np.ones((cur_batch_size, num_hid))
+            value_dict["c0"] = 0.1*np.ones((cur_batch_size, num_hid))
 
             ## feed-forward and back-propogation
             value_dict = ad.eval(wengart_list, value_dict)
@@ -222,8 +222,8 @@ def main(params):
         ## data
         value_dict["x"] = np.swapaxes(e, 0, 1)
         value_dict["y"] = l
-        value_dict["h0"] = np.zeros((val_num, num_hid))
-        value_dict["c0"] = np.zeros((val_num, num_hid))
+        value_dict["h0"] = 0.1*np.ones((val_num, num_hid))
+        value_dict["c0"] = 0.1*np.ones((val_num, num_hid))
         ## loss
         val_loss = ad.eval(wengart_list, value_dict)["loss"] / val_num
         val_losses += [val_loss]
@@ -236,23 +236,23 @@ def main(params):
     print "done"
 
     ## predict on the test set using the best parameters
-    output_wengart_list = lstm.my_xman.operationSequence(lstm.my_xman.output)
+    # output_wengart_list = lstm.my_xman.operationSequence(lstm.my_xman.output)
     test_num = len(data.test)
     ## data
     (idxs,e,l) = mb_test.next()
     best_value_dict["x"] = np.swapaxes(e, 0, 1)
     best_value_dict["y"] = l
-    best_value_dict["h0"] = np.zeros((test_num, num_hid))
-    best_value_dict["c0"] = np.zeros((test_num, num_hid))
+    best_value_dict["h0"] = 0.1*np.ones((test_num, num_hid))
+    best_value_dict["c0"] = 0.1*np.ones((test_num, num_hid))
     ## loss
-    test_loss = ad.eval(wengart_list, best_value_dict)["loss"] / test_num
-    test_predict = list(ad.eval(output_wengart_list, best_value_dict)["output"])
+    best_value_dict = ad.eval(wengart_list, best_value_dict)
+    test_loss = best_value_dict["loss"] / test_num
+    test_output = best_value_dict["output"]
     # print ("predicted labels on %d testing samples" % test_num)
 
     ## save predicted probabilities on test set
-    np.save(output_file, test_predict)
-
-    return (training_time, val_losses, test_loss)
+    np.save(output_file, test_output)
+    # return (training_time, val_losses, test_loss)
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
@@ -264,13 +264,14 @@ if __name__=='__main__':
     parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
     params = vars(parser.parse_args())
+    main(params)
 
     ## for debugging
     # params = {"max_len":3, "num_hid":10, "batch_size":16,
     #             "dataset":"../data/tiny", "epochs":15, "init_lr":0.5,
     #             "output_file":"../lstm_out/predict_tiny.npy"}
 
-    (training_time, val_losses, test_loss) = main(params)
+    # (training_time, val_losses, test_loss) = main(params)
     # ## save validating loss and training time
     # basename = params["output_file"].split(".npy")[0]
     # np.savetxt(basename+"_val_loss.txt", val_losses)
@@ -301,45 +302,3 @@ if __name__=='__main__':
 #     #     if lstm.my_xman.isParam(rname):
 #     #         print rname, value_dict[rname].shape == gradients[rname].shape 
 
-#     ####### detailed debug for gradient ##########
-# TRACE_BP=True
-# opt_wengart = ad.optimizeForBProp(wengart_list)
-# deltaDict = {"loss":1.0}
-# (dstName,funName,inputNames) = opt_wengart[0]
-# delta = deltaDict[dstName]
-# if TRACE_BP: print 'bprop [',delta,']',dstName,'=',funName,inputNames
-# values = [delta] + map(lambda a:value_dict[a], [dstName]+list(inputNames))
-# eps = 1e-1
-# old_loss = value_dict["loss"]
-# y = value_dict['y']
-
-# # for i in range(len(inputNames)):
-# # if TRACE_BP: print ' -',dstName,'->',funName,'-> (...',inputNames[i],'...)'
-# i=0
-# grad = gradients[inputNames[i]]
-# old_value = np.copy(value_dict[inputNames[i]])
-# old_p = EVAL_FUNS['softMax'](old_value)
-# -np.sum(np.multiply(y, np.log(old_p)))
-
-# ## new value
-# new_value = np.copy(value_dict[inputNames[i]])
-# new_value[0][0] += eps
-# new_p = EVAL_FUNS['softMax'](new_value)
-# new_loss = -np.sum(np.multiply(y, np.log(new_p)))
-
-# ## new loss
-# value_dict['o2'] = np.copy(new_value)
-# value_dict = ad.eval(wengart_list, value_dict)
-# ## numerical gradient
-# num_grad = (new_loss - old_loss) / eps
-# # set back
-# value_dict[inputNames[i]] = old_value
-
-#     # ad._incrementBy(deltaDict, inputNames[i], result)
-
-# print EVAL_FUNS['softMax'](old_value)
-# print EVAL_FUNS['softMax'](new_value)
-
-# np.sum(np.multiply(y, np.log(EVAL_FUNS['softMax'](old_value))))
-# np.sum(np.multiply(y, np.log(EVAL_FUNS['softMax'](new_value))))
-# -(y-EVAL_FUNS["softMax"](old_value))

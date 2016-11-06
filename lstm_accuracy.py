@@ -2,12 +2,13 @@
 import numpy as np
 from utils import *
 
-dataset = "../data/smaller"
+dataset = "../data/tiny"
 max_len = 10
-output_file = "../lstm_out/predict_smaller.npy"
+output_file = "../lstm_out/predict_tiny.npy"
 
 ## predicted results
-test_predict = np.load(output_file)
+test_output = np.load(output_file)
+test_predict = np.argmax(test_output, axis=1)
 
 ## true results
 dp = DataPreprocessor()
