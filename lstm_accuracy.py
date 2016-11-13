@@ -24,6 +24,7 @@ test_true = np.argmax(l, axis=1)
 compare = np.concatenate((test_predict[:, np.newaxis], test_true[:, np.newaxis]), axis=1)
 accuracy = np.sum(test_predict== test_true) / float(len(test_true))
 print "accuracy=", accuracy
+## 0.657657657658
 
 
 

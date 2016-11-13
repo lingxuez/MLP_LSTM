@@ -62,13 +62,15 @@ EVAL_FUNS = {
     'square':  lambda x: np.square(x),
     ## p, y are arrays with same shape; rows are samples
     ## y is one-hot representation
-    'crossEnt': lambda p,y: -np.sum(np.multiply(y, np.log(np.clip(p, P_MIN, P_MAX)))),
+    'crossEnt': lambda p,y: -np.sum(y * np.log(p)) / y.shape[0],
+                    # -np.sum(np.multiply(y, np.log(np.clip(p, P_MIN, P_MAX)))),
     ## x: rows are samples; soft-max is applied row-wise
-    'softMax': lambda x: np.clip(np.exp(x-np.max(x)) / \
-                    np.sum(np.exp(x-np.max(x)), axis=1)[:, np.newaxis],
-                    P_MIN, P_MAX),
+    'softMax': lambda x: np.exp(x-np.max(x)) / np.sum(np.exp(x-np.max(x)), axis=1)[:, np.newaxis], 
+                    # np.clip(np.exp(x-np.max(x)) / \
+                    # np.sum(np.exp(x-np.max(x)), axis=1)[:, np.newaxis],
+                    # P_MIN, P_MAX),
     ## relu is applied element wise 
-    'relu': lambda x: np.multiply(x, np.greater(x, 0)),
+    'relu': lambda x: np.maximum(x, 0), #np.multiply(x, np.greater(x, 0)),
     ## for each row of p (one sample), find the index of maxima
     'predict': lambda p: np.argmax(p, axis=1),
     ## element-wise sigmoid
@@ -76,7 +78,7 @@ EVAL_FUNS = {
     ## element-wise tanh
     'tanh': lambda x: np.tanh(x),
     ## element-wise multiply
-    'ele_mul': lambda x1,x2: np.multiply(x1, x2)
+    'ele_mul': lambda x1,x2: x1 * x2
     }
 
 # the functions that autograd.bprop will use in reverse mode
@@ -113,12 +115,14 @@ BP_FUNS = {
     'mul': [lambda delta,out,x1,x2: np.dot(delta, x2.transpose()), 
                         lambda delta,out,x1,x2: np.dot(x1.transpose(), delta)],
     ## crossEnt(softMax(o), y)
-    'crossEnt-softMax':  [lambda delta,out,o,y: -(y-EVAL_FUNS["softMax"](o)), 
-                        lambda delta,out,o,y: -np.log(np.clip(EVAL_FUNS["softMax"](o), P_MIN, P_MAX))],
+    'crossEnt-softMax':  [lambda delta,out,o,y: -(y-EVAL_FUNS["softMax"](o))/y.shape[0], 
+                        lambda delta,out,o,y: y ## this won't be used!
+                        ],
     ## element-wise operations
-    'relu': [lambda delta,out,x: np.multiply(delta, np.greater(x, 0))],
-    'sigmoid': [lambda delta,out,x: np.multiply(delta, np.multiply(out, 1-out))],
-    'tanh': [lambda delta,out,x: np.multiply(delta, 1 - np.square(out))],
-    'ele_mul': [lambda delta,out,x1,x2: np.multiply(delta, x2), 
-                lambda delta,out,x1,x2: np.multiply(delta, x1)]
+    'relu': [lambda delta,out,x: delta * (x > 0) 
+            ],
+    'sigmoid': [lambda delta,out,x: delta * out * (1-out)],
+    'tanh': [lambda delta,out,x: delta * (1 - np.square(out))],
+    'ele_mul': [lambda delta,out,x1,x2: delta * x2, 
+                lambda delta,out,x1,x2: delta * x1]
     }

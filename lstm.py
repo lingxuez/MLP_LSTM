@@ -1,7 +1,7 @@
 """
 Long Short Term Memory for character level entity classification
 """
-import sys, math, time
+import sys, math, time, copy
 import argparse
 import numpy as np
 from xman import *
@@ -64,21 +64,31 @@ class LSTM(object):
         xm.Uo = f.param(name="Uo", 
             default=np.random.uniform(low=-bound_u, high=bound_u,
                         size=(num_hid, num_hid)))
-        xm.bf = f.param(name="bf", default=bound_b*np.ones((1, num_hid)))
-        xm.bi = f.param(name="bi", default=bound_b*np.ones((1, num_hid)))
-        xm.bc = f.param(name="bc", default=bound_b*np.ones((1, num_hid)))
-        xm.bo = f.param(name="bo", default=bound_b*np.ones((1, num_hid)))
+        xm.bf = f.param(name="bf", 
+            default=np.random.uniform(low=-bound_b, high=bound_b,
+                        size=(1, num_hid)))
+        xm.bi = f.param(name="bi", 
+            default=np.random.uniform(low=-bound_b, high=bound_b,
+                        size=(1, num_hid)))
+        xm.bc = f.param(name="bc", 
+            default=np.random.uniform(low=-bound_b, high=bound_b,
+                        size=(1, num_hid)))
+        xm.bo = f.param(name="bo", 
+            default=np.random.uniform(low=-bound_b, high=bound_b,
+                        size=(1, num_hid)))
 
         xm.W2 = f.param(name="W2", 
             default=np.random.uniform(low=-bound_w2, high=bound_w2, 
                         size=(num_hid, out_size)))
-        xm.b2 = f.param(name="b2", default=bound_b*np.ones((1, out_size)))
+        xm.b2 = f.param(name="b2", 
+            default=np.random.uniform(low=-bound_b, high=bound_b,
+                        size=(1, out_size)))
 
         ## hidden states and gates; we have one hidden state per sample
         xm.f, xm.i, xm.cnew, xm.o = [], [], [], [] 
         ## initialize the first hidden state and cell state
-        xm.h = [f.input(name="h0", default=0.1*np.ones((nsample, num_hid)))]
-        xm.c = [f.input(name="c0", default=0.1*np.ones((nsample, num_hid)))]
+        xm.h = [f.input(name="h0", default=0.01*np.ones((nsample, num_hid)))]
+        xm.c = [f.input(name="c0", default=0.01*np.ones((nsample, num_hid)))]
         ## LSTM
         for t in xrange(max_len):
             xm.f += [f.sigmoid(f.tri_add(xm.bf, 
@@ -96,7 +106,6 @@ class LSTM(object):
         xm.o2 = f.relu(f.mul(xm.h[max_len], xm.W2) + xm.b2)
         xm.output = f.softMax(xm.o2)
         xm.loss = f.crossEnt(xm.output, xm.y)
-        # xm.output = f.predict(xm.p)
         return xm.setup()
 
 
@@ -150,9 +159,6 @@ class LSTM(object):
         ## compare to numeric results
         print "checking gradients..."
         for rname in gradients:
-            # if (rname=="loss") or (not self.my_xman.isParam(rname)):
-            #     print "skipped " + rname
-            #     continue
             if self.my_xman.isParam(rname):
                 self.checkVarGrad(rname, gradients[rname], ad, wengart_list, value_dict, 
                                 eps=eps, tol=tol)
@@ -190,12 +196,13 @@ def main(params):
     min_val_loss, best_value_dict = None, None 
 
     # track losses for debugging
-    # (val_losses, train_losses, training_time) = ([], [], [])
-    
+    # (val_losses, training_time) = ([], []) 
+    lr = init_lr  
     for i in range(epochs):
         mb_train.reset()
         mb_valid.reset()
         # start_time = time.time()
+        # lr = init_lr / (i+1)
         
         #############################################
         ## mini-batch stochastic gradient descent
@@ -212,47 +219,43 @@ def main(params):
 
             ## feed input in reverse order so useful characters appear last
             cur_batch_size = e.shape[0]
-            reverse_input = np.swapaxes(e, 0,1)[xrange(max_len-1,-1,-1),:,:]
             for char_index in xrange(max_len):
-                value_dict["x"+str(char_index)] = reverse_input[char_index, :, :]           
+                value_dict["x"+str(char_index)] = e[:, max_len-1-char_index, :]           
             value_dict["y"] = l
-            value_dict["h0"] = 0.1*np.ones((cur_batch_size, num_hid))
-            value_dict["c0"] = 0.1*np.ones((cur_batch_size, num_hid))
+            value_dict["h0"] = 0.01*np.ones((cur_batch_size, num_hid))
+            value_dict["c0"] = 0.01*np.ones((cur_batch_size, num_hid))
 
             ## feed-forward and back-propogation
             value_dict = ad.eval(wengart_list, value_dict)
-            gradients = ad.bprop(wengart_list, value_dict, loss=1.0/cur_batch_size)
+            gradients = ad.bprop(wengart_list, value_dict, loss=1.0)
 
             # update parameters
-            lr = init_lr / (cur_batch_size*((i+1) * (i+1))) ## learning rate
             for rname in gradients:
                 if lstm.my_xman.isParam(rname):
                     value_dict[rname] -= lr * gradients[rname] 
 
-            ## for debugging, also record training loss
-            # train_losses += [ad.eval(wengart_list, value_dict)["loss"]/cur_batch_size]
-
         # training_time += [time.time() - start_time]
+        # print i, "train_loss=", value_dict["loss"]
 
         #####################################
         ## validating loss
         #####################################
-        val_num = len(data.validation)
         (idxs,e,l) = mb_valid.next()
+        val_num = e.shape[0]
         ## prepare data
-        reverse_input = np.swapaxes(e, 0,1)[xrange(max_len-1,-1,-1),:,:]
         for char_index in xrange(max_len):
-            value_dict["x"+str(char_index)] = reverse_input[char_index, :, :] 
+            value_dict["x"+str(char_index)] = e[:, max_len-1-char_index, :] 
         value_dict["y"] = l
         value_dict["h0"] = 0.01*np.ones((val_num, num_hid))
         value_dict["c0"] = 0.01*np.ones((val_num, num_hid))
         ## loss
-        val_loss = ad.eval(wengart_list, value_dict)["loss"] / val_num
+        val_loss = ad.eval(wengart_list, value_dict)["loss"]
         # val_losses += [val_loss]
+        # print i, "val_loss=", val_loss
 
         ## save the best model
         if (min_val_loss is None) or val_loss < min_val_loss:
-            best_value_dict = value_dict
+            best_value_dict = copy.deepcopy(value_dict)
             min_val_loss = val_loss
 
     print "done"
@@ -261,18 +264,17 @@ def main(params):
     ## predict on the test set using the best parameters
     ########################################################
     ## data
-    test_num = len(data.test)
     (idxs,e,l) = mb_test.next()
-    reverse_input = np.swapaxes(e, 0,1)[xrange(max_len-1,-1,-1),:,:]
+    test_num = e.shape[0]
     for char_index in xrange(max_len):
-        value_dict["x"+str(char_index)] = reverse_input[char_index, :, :] 
+        best_value_dict["x"+str(char_index)] = e[:, max_len-1-char_index, :] 
     best_value_dict["y"] = l
-    best_value_dict["h0"] = 0.1*np.ones((test_num, num_hid))
-    best_value_dict["c0"] = 0.1*np.ones((test_num, num_hid))
+    best_value_dict["h0"] = 0.01*np.ones((test_num, num_hid))
+    best_value_dict["c0"] = 0.01*np.ones((test_num, num_hid))
 
     ## loss and output
     best_value_dict = ad.eval(wengart_list, best_value_dict)
-    test_loss = best_value_dict["loss"] / test_num
+    test_loss = best_value_dict["loss"]
     test_output = best_value_dict["output"]
 
     ## save predicted probabilities on test set
@@ -280,7 +282,8 @@ def main(params):
 
     ## for debugging
     # return (training_time, train_losses, val_losses, test_loss)
-
+    # return test_loss
+# 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--max_len', dest='max_len', type=int, default=10)
@@ -291,7 +294,10 @@ if __name__=='__main__':
     parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
     params = vars(parser.parse_args())
-    main(params)
+    # main(params)
+    
+    # test_loss = main(params)
+    # print "test_loss=", test_loss
 
     ####################
     # for debugging and report
@@ -302,8 +308,7 @@ if __name__=='__main__':
 
     # (training_time,  train_losses, val_losses, test_loss) = main(params)
     # print test_loss
-    # # print val_losses
-    # # ## save validating loss and training time
+    # ## save validating loss and training time
     # basename = params["output_file"].split(".npy")[0]
     # np.savetxt(basename+"_val_loss.txt", val_losses)
     # np.savetxt(basename+"_train_loss.txt", train_losses)
@@ -323,44 +328,4 @@ if __name__=='__main__':
     #        len(data.chardict), len(data.labeldict))
 
     # lstm = LSTM(max_len, mb_train.num_chars, num_hid, mb_train.num_labels)
-
-    # wengart_list = lstm.my_xman.operationSequence(lstm.my_xman.loss)
-    # value_dict = lstm.my_xman.inputDict()
-    # ad = Autograd(lstm.my_xman)
-    # opt_wengart_list = ad.optimizeForBProp(wengart_list)
-    # value_dict = ad.eval(wengart_list, value_dict)
-
-    # ## data
-    # (idxs,e,l) = mb_train.next()
-    # cur_batch_size = e.shape[0]
-    # reverse_input = np.swapaxes(e, 0,1)[xrange(max_len-1,-1,-1),:,:]
-    # for char_index in xrange(max_len):
-    #     value_dict["x"+str(char_index)] = reverse_input[char_index, :, :]           
-    # value_dict["y"] = l
-    # value_dict["h0"] = 0.1*np.ones((cur_batch_size, num_hid))
-    # value_dict["c0"] = 0.1*np.ones((cur_batch_size, num_hid))
-
-    # ## feed-forward and back-propogation
-    # value_dict = ad.eval(wengart_list, value_dict)
-    # gradients = ad.bprop(wengart_list, value_dict, loss=1.0/cur_batch_size)
-
-    # # update parameters
-    # for rname in gradients:
-    #     if lstm.my_xman.isParam(rname):
-    #         # print rname
-    #         value_dict[rname] -= lr * gradients[rname] 
-
-    #####################
-    # for testing and debugging
-    ######################
-    # max_len, num_chars, num_hid, num_labels, nsample = 3, 10, 8, 5, 1
-    # lstm = LSTM(max_len, num_chars, num_hid, num_labels, nsample) 
-
-    # # ## try ffwd and bprop, check dimensions
-    # wengart_list = lstm.my_xman.operationSequence(lstm.my_xman.loss)
-    # value_dict = lstm.my_xman.inputDict()
-    # ad = Autograd(lstm.my_xman) 
-    # value_dict = ad.eval(wengart_list, value_dict)
-    # gradients = ad.bprop(wengart_list, value_dict, loss=1.0)
-
     # lstm.checkGradient()

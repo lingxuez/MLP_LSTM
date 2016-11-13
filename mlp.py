@@ -1,7 +1,7 @@
 """
 Multilayer Perceptron for character level entity classification
 """
-import argparse, math, time
+import argparse, math, time, copy
 import numpy as np
 from xman import *
 from utils import *
@@ -38,7 +38,9 @@ class MLP(object):
         xm.W1 = f.param(name="W1", 
             default=np.random.uniform(low=-init_bound, high=init_bound,
                         size=(dim_input, dim_hidden)))
-        xm.b1 = f.param(name="b1", default=init_bias*np.ones((1, dim_hidden)))
+        xm.b1 = f.param(name="b1", 
+            default=np.random.uniform(low=-init_bias, high=init_bias,
+            size=(1, dim_hidden)))
         xm.o1 = f.relu(f.mul(xm.x, xm.W1) + xm.b1)
 
         ## second layer
@@ -46,14 +48,14 @@ class MLP(object):
         xm.W2 = f.param(name="W2", 
             default=np.random.uniform(low=-init_bound, high=init_bound, 
                         size=(dim_hidden, dim_class)))
-        xm.b2 = f.param(name="b2", default=init_bias*np.ones((1, dim_class)))
+        xm.b2 = f.param(name="b2", 
+            default=np.random.uniform(low=-init_bias, high=init_bias,
+                size=(1, dim_class)))
         xm.o2 = f.relu(f.mul(xm.o1, xm.W2) + xm.b2)
 
         ## cross entropy loss
         xm.output = f.softMax(xm.o2)
         xm.loss = f.crossEnt(xm.output, xm.y)
-        # xm.output = f.predict(xm.p)
-
         return xm.setup()
 
     def checkGradient(self, eps=1e-4, tol=1e-4):
@@ -134,10 +136,13 @@ def main(params):
     ad = Autograd(mlp.my_xman)
     # track loss for debugging
     # (val_losses, training_time) = ([], [])
+
+    lr = init_lr
     for i in range(epochs):
         # print "epoch_", i+1, 
         mb_train.reset()
         mb_valid.reset()
+        # lr = init_lr / (i+1)
         # start_time = time.time()
         ## mini-batch stochastic gradient descent
         for (idxs,e,l) in mb_train:
@@ -157,35 +162,37 @@ def main(params):
 
             ## feed-forward and back-propogation
             value_dict = ad.eval(wengart_list, value_dict)
-            gradients = ad.bprop(wengart_list, value_dict, loss=1.0/cur_batch_size)
+            gradients = ad.bprop(wengart_list, value_dict, loss=1.0)
 
             # update parameters
-            lr = init_lr / (cur_batch_size*((i+1) * (i+1))) ## learning rate
+            # lr = init_lr / (cur_batch_size*((i+1) * (i+1))) ## learning rate
             for rname in gradients:
                 if mlp.my_xman.isParam(rname):
                     value_dict[rname] -= lr * gradients[rname] 
 
         # training_time += [time.time() - start_time]
+        # print i, "train_loss=", value_dict["loss"]
 
-        ## calculate the validating loss
+        #####################################
+        ## validating loss
+        #####################################
         val_num = len(data.validation)
         (idxs,e,l) = mb_valid.next()
         ## data
         value_dict["x"] = e.reshape(val_num, max_len*num_chars)
         value_dict["y"] = l
         ## loss
-        val_loss = ad.eval(wengart_list, value_dict)["loss"] / val_num
+        val_loss = ad.eval(wengart_list, value_dict)["loss"]
         # val_losses += [val_loss]
-        # print ("calculated loss on %d validating samples" % val_num)
+        # print i, "val_loss=", val_loss
 
         ## save the best model
         if (min_val_loss is None) or val_loss < min_val_loss:
-            best_value_dict = value_dict
+            best_value_dict = copy.deepcopy(value_dict)
             min_val_loss = val_loss
     print "done"
 
     ## predict on the test set using the best parameters
-    # output_wengart_list = mlp.my_xman.operationSequence(mlp.my_xman.output)
     test_num = len(data.test)
     ## data
     (idxs,e,l) = mb_test.next()
@@ -193,14 +200,14 @@ def main(params):
     best_value_dict["y"] = l
     ## loss
     best_value_dict = ad.eval(wengart_list, best_value_dict)
-    test_loss = best_value_dict["loss"] / test_num
+    test_loss = best_value_dict["loss"]
     test_output = best_value_dict["output"]
-    # print ("predicted labels on %d testing samples" % test_num)
 
     ## save predicted probabilities on test set
     np.save(output_file, test_output)
 
     # return (training_time, val_losses, test_loss)
+    # return test_loss
 
 
 if __name__=='__main__':
@@ -216,8 +223,9 @@ if __name__=='__main__':
     main(params)
 
     ## training
-
     # (training_time, val_losses, test_loss) = main(params)
+    # test_loss = main(params)
+    # print "test_loss=", test_loss
 
     # ## save validating loss and training time
     # basename = params["output_file"].split(".npy")[0]
@@ -240,42 +248,4 @@ if __name__=='__main__':
     #        len(data.chardict), len(data.labeldict))
 
     # (idxs,e,l) = mb_train.next() 
-
-
-    # # mlp = MLP([max_len*mb_train.num_chars, num_hid, mb_train.num_labels])
-
-    # mlp = MLP([10, 5, 3])
-    # wengart_list = mlp.my_xman.operationSequence(mlp.my_xman.loss)
-    # init_dict = mlp.my_xman.inputDict()
-
-    # # input
-    # y = np.zeros((2, 3))
-    # y[0, np.random.choice(3)] = 1
-    # y[1, np.random.choice(3)] = 1
-    # init_dict["y"] = y
-
-    # init_dict["x"] = np.random.rand(2, 10)
-
-    # ## feedforward & backpropogation
-    # ad = Autograd(mlp.my_xman) 
-    # value_dict = ad.eval(wengart_list, init_dict)
-    # gradients = ad.bprop(wengart_list, value_dict, loss=1.0)
-
-    # for rname in gradients:
-    #     if mlp.my_xman.isParam(rname):
-    #         print rname, value_dict[rname].shape == gradients[rname].shape 
-
-    # opt_wengart = ad.optimizeForBProp(wengart_list)
-
-    # deltaDict = {"loss":1.0}
-    # (dstName,funName,inputNames) = opt_wengart[0]
-    # delta = deltaDict[dstName]
-    # values = [delta] + map(lambda a:value_dict[a], [dstName]+list(inputNames))
-
-    # for i in range(len(inputNames)):
-    #     if TRACE_BP: print ' -',dstName,'->',funName,'-> (...',inputNames[i],'...)'
-    #     result = (BP_FUNS[funName][i])(*values)
-    #     # increment a running sum of all the delta's that are
-    #     # pushed back to the i-th parameter, initializing the
-    #     # zero if needed.
-    #     ad._incrementBy(deltaDict, inputNames[i], result)
+    # mlp = MLP([max_len*mb_train.num_chars, num_hid, mb_train.num_labels])
