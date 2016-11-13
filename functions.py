@@ -115,8 +115,10 @@ BP_FUNS = {
     ## crossEnt(softMax(o), y)
     'crossEnt-softMax':  [lambda delta,out,o,y: -(y-EVAL_FUNS["softMax"](o)), 
                         lambda delta,out,o,y: -np.log(np.clip(EVAL_FUNS["softMax"](o), P_MIN, P_MAX))],
+    ## element-wise operations
     'relu': [lambda delta,out,x: np.multiply(delta, np.greater(x, 0))],
-    'sigmoid': [lambda delta,out,x: np.multiply(out, 1-out)],
-    'tanh': [lambda delta,out,x: 1 - np.square(out)],
-    'ele_mul': [lambda delta,out,x1,x2: x2, lambda delta,out,x1,x2: x1]
+    'sigmoid': [lambda delta,out,x: np.multiply(delta, np.multiply(out, 1-out))],
+    'tanh': [lambda delta,out,x: np.multiply(delta, 1 - np.square(out))],
+    'ele_mul': [lambda delta,out,x1,x2: np.multiply(delta, x2), 
+                lambda delta,out,x1,x2: np.multiply(delta, x1)]
     }

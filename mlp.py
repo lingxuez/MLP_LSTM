@@ -66,7 +66,7 @@ class MLP(object):
 
         ## gradient calculated by model
         value_dict = ad.eval(wengart_list, value_dict)
-        loss = value_dict["loss"]
+        old_loss = value_dict["loss"]
         gradients = ad.bprop(wengart_list, value_dict, loss=1.0)
 
         ## compare to numeric results
@@ -78,23 +78,24 @@ class MLP(object):
 
             print "checking gradient for " + rname
             grad = gradients[rname]
-            value = np.copy(value_dict[rname])
+            old_value = np.copy(value_dict[rname])
 
             ## change one coordinate at a time, evaluate new loss
             for row in xrange(value.shape[0]):
                 for col in xrange(value.shape[1]):
                     ## new value
-                    new_value = np.copy(value)
+                    new_value = np.copy(old_value)
                     new_value[row][col] += eps
                     ## new loss
                     value_dict[rname] = new_value
                     new_loss = ad.eval(wengart_list, value_dict)["loss"]
                     ## numerical gradient
-                    num_grad = (new_loss - loss) / eps
+                    num_grad = (new_loss - old_loss) / eps
+
                     if abs(num_grad - grad[row][col]) > tol:
                         raise ValueError("Gradient check fails for "+rname)
                     ## set back to original value
-                    value_dict[rname] = value
+                    value_dict[rname] = old_value
 
 
 def main(params):
@@ -127,17 +128,17 @@ def main(params):
 
     ## train
     print "training..."
-    lr, min_val_loss, best_value_dict = init_lr, None, None  
+    min_val_loss, best_value_dict = None, None  
     wengart_list = mlp.my_xman.operationSequence(mlp.my_xman.loss)
     value_dict = mlp.my_xman.inputDict()
     ad = Autograd(mlp.my_xman)
     # track loss for debugging
-    (val_losses, training_time) = ([], [])
+    # (val_losses, training_time) = ([], [])
     for i in range(epochs):
         # print "epoch_", i+1, 
         mb_train.reset()
         mb_valid.reset()
-        (start_time, num_train) = (time.time(), 0)
+        # start_time = time.time()
         ## mini-batch stochastic gradient descent
         for (idxs,e,l) in mb_train:
             ## idxs: ids of examples in minibatch, 
@@ -151,7 +152,6 @@ def main(params):
 
             ## prepare the input, flatten e to be (batch_size, max_len*num_chars)
             cur_batch_size = e.shape[0]
-            num_train += cur_batch_size
             value_dict["x"] = e.reshape(cur_batch_size, max_len*num_chars)
             value_dict["y"] = l
 
@@ -160,12 +160,12 @@ def main(params):
             gradients = ad.bprop(wengart_list, value_dict, loss=1.0/cur_batch_size)
 
             # update parameters
+            lr = init_lr / (cur_batch_size*((i+1) * (i+1))) ## learning rate
             for rname in gradients:
                 if mlp.my_xman.isParam(rname):
                     value_dict[rname] -= lr * gradients[rname] 
 
-        training_time += [time.time() - start_time]
-        # print ("passed through %d samples" % num_train)
+        # training_time += [time.time() - start_time]
 
         ## calculate the validating loss
         val_num = len(data.validation)
@@ -175,7 +175,7 @@ def main(params):
         value_dict["y"] = l
         ## loss
         val_loss = ad.eval(wengart_list, value_dict)["loss"] / val_num
-        val_losses += [val_loss]
+        # val_losses += [val_loss]
         # print ("calculated loss on %d validating samples" % val_num)
 
         ## save the best model
@@ -210,7 +210,7 @@ if __name__=='__main__':
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=64)
     parser.add_argument('--dataset', dest='dataset', type=str, default='tiny')
     parser.add_argument('--epochs', dest='epochs', type=int, default=15)
-    parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.05)
+    parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
     params = vars(parser.parse_args())
     main(params)
