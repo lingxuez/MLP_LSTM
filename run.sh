@@ -3,16 +3,13 @@
 ## 
 ## Lingxue Zhu (lzhu@cmu.edu)
 ##
+## The data set released in this repository is a tiny example. 
+## Please replace them with your favorate data sets.
+## Data should be stored using the same prefix for train, valid and test sets:
 ##
-## Data should be stored under directory 
-##
-##  data/
-##
-## using the same prefix for train, valid and test sets:
-##
-##  data/prefix.train
-##  data/prefix.valid
-##  data/prefix.test
+##  mydata.train
+##  mydata.valid
+##  mydata.test
 ##
 ## Each data file contains two columns, separated by tab.
 ## The first column contains the title, a string without spaces
@@ -24,10 +21,11 @@
 ## Loch_of_Craiglush   Place
 ## ----------
 ##
-## The predicted probability on test data set is stored in a .npy file.
+## The predicted probability on test data set is stored in a .npy file,
+## where the output filename can be specified by the `--output_file` option.
 ##
 
-dataset="data/prefix"
+dataset="data/tiny"
 batchsize=64
 
 ##############
