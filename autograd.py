@@ -12,13 +12,16 @@ class Autograd(object):
         valueDict is a dict holding the values of any
         inputs/parameters that are needed (indexed by register name).
         """
+        ## count the total number of forward steps
+        steps = 0
         for (dstName,funName,inputNames) in opseq:
             if TRACE_EVAL: print 'eval:',dstName,'=',funName,inputNames
             inputValues = map(lambda a:valueDict[a] if a in valueDict else a.default, inputNames)
             fun = EVAL_FUNS[funName] 
             result = fun(*inputValues)
             valueDict[dstName] = result
-        return valueDict
+            steps += 1
+        return (steps, valueDict)
 
     def bprop(self,opseq,valueDict,**deltaDict):
         """ For each intermediate register g used in computing the function f
@@ -27,6 +30,8 @@ class Autograd(object):
         needed for the gradient (indexed by register name), as
         returned by eval.
         """
+        ## count the total number of back-prop steps
+        steps = 0
         for (dstName,funName,inputNames) in self.optimizeForBProp(opseq):
             delta = deltaDict[dstName]
             if TRACE_BP: print 'bprop [',delta,']',dstName,'=',funName,inputNames
@@ -43,7 +48,8 @@ class Autograd(object):
                 # pushed back to the i-th parameter, initializing the
                 # zero if needed.
                 self._incrementBy(deltaDict, inputNames[i], result)
-        return deltaDict
+                steps += 1
+        return (steps, deltaDict)
 
     def _incrementBy(self, dict, key, inc):
         if key not in dict: dict[key] = inc

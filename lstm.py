@@ -195,14 +195,13 @@ def main(params):
     ad = Autograd(lstm.my_xman)
     min_val_loss, best_value_dict = None, None 
 
-    # track losses for debugging
-    # (val_losses, training_time) = ([], []) 
+    # track training time and number of steps
+    (steps, training_time) = ([], []) 
     lr = init_lr  
     for i in range(epochs):
         mb_train.reset()
         mb_valid.reset()
-        # start_time = time.time()
-        # lr = init_lr / (i+1)
+        start_time = time.time()
         
         #############################################
         ## mini-batch stochastic gradient descent
@@ -226,16 +225,16 @@ def main(params):
             value_dict["c0"] = 0.01*np.ones((cur_batch_size, num_hid))
 
             ## feed-forward and back-propogation
-            value_dict = ad.eval(wengart_list, value_dict)
-            gradients = ad.bprop(wengart_list, value_dict, loss=1.0)
+            (f_step, value_dict) = ad.eval(wengart_list, value_dict)
+            (b_step, gradients) = ad.bprop(wengart_list, value_dict, loss=1.0)
+            steps += [f_step + b_step]
 
             # update parameters
             for rname in gradients:
                 if lstm.my_xman.isParam(rname):
                     value_dict[rname] -= lr * gradients[rname] 
 
-        # training_time += [time.time() - start_time]
-        # print i, "train_loss=", value_dict["loss"]
+        training_time += [time.time() - start_time]
 
         #####################################
         ## validating loss
@@ -249,9 +248,8 @@ def main(params):
         value_dict["h0"] = 0.01*np.ones((val_num, num_hid))
         value_dict["c0"] = 0.01*np.ones((val_num, num_hid))
         ## loss
-        val_loss = ad.eval(wengart_list, value_dict)["loss"]
-        # val_losses += [val_loss]
-        # print i, "val_loss=", val_loss
+        (f_step, value_dict) = ad.eval(wengart_list, value_dict)
+        val_loss = value_dict["loss"]
 
         ## save the best model
         if (min_val_loss is None) or val_loss < min_val_loss:
@@ -273,17 +271,16 @@ def main(params):
     best_value_dict["c0"] = 0.01*np.ones((test_num, num_hid))
 
     ## loss and output
-    best_value_dict = ad.eval(wengart_list, best_value_dict)
+    (f_step, best_value_dict) = ad.eval(wengart_list, best_value_dict)
     test_loss = best_value_dict["loss"]
     test_output = best_value_dict["output"]
 
     ## save predicted probabilities on test set
     np.save(output_file, test_output)
 
-    ## for debugging
-    # return (training_time, train_losses, val_losses, test_loss)
-    # return test_loss
-# 
+    return (training_time, steps, test_loss)
+
+ 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--max_len', dest='max_len', type=int, default=10)
@@ -294,38 +291,16 @@ if __name__=='__main__':
     parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
     params = vars(parser.parse_args())
-    # main(params)
     
-    # test_loss = main(params)
-    # print "test_loss=", test_loss
+    (training_time, steps, test_loss) = main(params)
+    print "test loss =", test_loss
+    print "avg training time per epoch =", np.mean(training_time)
+    # print "avg steps =", np.mean(steps), ", var=", np.var(steps)
 
-    ####################
-    # for debugging and report
-    ####################
-    # params = {"max_len":10, "num_hid":50, "batch_size":64,
-    #             "dataset":"../data/smaller", "epochs":15, "init_lr":0.5,
-    #             "output_file":"../lstm_out/predict_smaller.npy"}
+    ## save validating loss and training time
+    # basename = params["output_file"].split(".npy")[0] + \
+    #                 "_max_len"+str(params["max_len"])+ \
+    #                 "batch"+str(params["batch_size"])
 
-    # (training_time,  train_losses, val_losses, test_loss) = main(params)
-    # print test_loss
-    # ## save validating loss and training time
-    # basename = params["output_file"].split(".npy")[0]
-    # np.savetxt(basename+"_val_loss.txt", val_losses)
-    # np.savetxt(basename+"_train_loss.txt", train_losses)
-    # np.savetxt(basename+"_ trainig_time.txt", training_time)
-
-    # ## debug
-    # max_len = 2
-    # num_hid = 50
-    # batch_size = 1000
-    # dataset = "../data/tiny"
-    # lr = 0.5
-
-    # dp = DataPreprocessor()
-    # data = dp.preprocess('%s.train'%dataset, '%s.valid'%dataset, '%s.test'%dataset)
-    # # minibatches
-    # mb_train = MinibatchLoader(data.training, batch_size, max_len, 
-    #        len(data.chardict), len(data.labeldict))
-
-    # lstm = LSTM(max_len, mb_train.num_chars, num_hid, mb_train.num_labels)
-    # lstm.checkGradient()
+    # np.savetxt(basename+"_trainig_time.txt", training_time)
+    # np.savetxt(basename+"_steps.txt", steps)

@@ -134,17 +134,18 @@ def main(params):
     wengart_list = mlp.my_xman.operationSequence(mlp.my_xman.loss)
     value_dict = mlp.my_xman.inputDict()
     ad = Autograd(mlp.my_xman)
-    # track loss for debugging
-    # (val_losses, training_time) = ([], [])
 
+    # track training time and number of steps
+    (steps, training_time) = ([], []) 
     lr = init_lr
     for i in range(epochs):
-        # print "epoch_", i+1, 
         mb_train.reset()
         mb_valid.reset()
-        # lr = init_lr / (i+1)
-        # start_time = time.time()
+        start_time = time.time()
+
+        #############################################
         ## mini-batch stochastic gradient descent
+        #############################################
         for (idxs,e,l) in mb_train:
             ## idxs: ids of examples in minibatch, 
             ##      where len(idxs) == batch_size
@@ -161,17 +162,16 @@ def main(params):
             value_dict["y"] = l
 
             ## feed-forward and back-propogation
-            value_dict = ad.eval(wengart_list, value_dict)
-            gradients = ad.bprop(wengart_list, value_dict, loss=1.0)
+            (f_step, value_dict) = ad.eval(wengart_list, value_dict)
+            (b_step, gradients) = ad.bprop(wengart_list, value_dict, loss=1.0)
+            steps += [f_step + b_step]
 
             # update parameters
-            # lr = init_lr / (cur_batch_size*((i+1) * (i+1))) ## learning rate
             for rname in gradients:
                 if mlp.my_xman.isParam(rname):
                     value_dict[rname] -= lr * gradients[rname] 
 
-        # training_time += [time.time() - start_time]
-        # print i, "train_loss=", value_dict["loss"]
+        training_time += [time.time() - start_time]
 
         #####################################
         ## validating loss
@@ -182,9 +182,8 @@ def main(params):
         value_dict["x"] = e.reshape(val_num, max_len*num_chars)
         value_dict["y"] = l
         ## loss
-        val_loss = ad.eval(wengart_list, value_dict)["loss"]
-        # val_losses += [val_loss]
-        # print i, "val_loss=", val_loss
+        (f_step, value_dict) = ad.eval(wengart_list, value_dict)
+        val_loss = value_dict["loss"]
 
         ## save the best model
         if (min_val_loss is None) or val_loss < min_val_loss:
@@ -199,15 +198,14 @@ def main(params):
     best_value_dict["x"] = e.reshape(test_num, max_len*num_chars)
     best_value_dict["y"] = l
     ## loss
-    best_value_dict = ad.eval(wengart_list, best_value_dict)
+    (f_step, best_value_dict) = ad.eval(wengart_list, best_value_dict)
     test_loss = best_value_dict["loss"]
     test_output = best_value_dict["output"]
 
     ## save predicted probabilities on test set
     np.save(output_file, test_output)
 
-    # return (training_time, val_losses, test_loss)
-    # return test_loss
+    return (training_time, steps, test_loss)
 
 
 if __name__=='__main__':
@@ -220,32 +218,16 @@ if __name__=='__main__':
     parser.add_argument('--init_lr', dest='init_lr', type=float, default=0.5)
     parser.add_argument('--output_file', dest='output_file', type=str, default='output')
     params = vars(parser.parse_args())
-    main(params)
 
-    ## training
-    # (training_time, val_losses, test_loss) = main(params)
-    # test_loss = main(params)
-    # print "test_loss=", test_loss
+    (training_time, steps, test_loss) = main(params)
+    print "test loss =", test_loss
+    print "avg training time per epoch =", np.mean(training_time)
+    # print "avg steps =", np.mean(steps)
 
-    # ## save validating loss and training time
-    # basename = params["output_file"].split(".npy")[0]
-    # np.savetxt(basename+"_val_loss.txt", val_losses)
-    # np.savetxt(basename+"_ trainig_time.txt", training_time)
+    ## save validating loss and training time
+    # basename = params["output_file"].split(".npy")[0] + \
+    #                 "_max_len"+str(params["max_len"])+ \
+    #                 "batch"+str(params["batch_size"])
 
-    #####################
-    # for testing and debugging
-    ######################
-
-    # ## load data and preprocess
-    # dataset = "../data/tiny"
-    # batch_size=6
-    # max_len=20
-
-    # dp = DataPreprocessor()
-    # data = dp.preprocess('%s.train'%dataset, '%s.valid'%dataset, '%s.test'%dataset)
-    # ## minibatches
-    # mb_train = MinibatchLoader(data.training, batch_size, max_len, 
-    #        len(data.chardict), len(data.labeldict))
-
-    # (idxs,e,l) = mb_train.next() 
-    # mlp = MLP([max_len*mb_train.num_chars, num_hid, mb_train.num_labels])
+    # np.savetxt(basename+"_trainig_time.txt", training_time)
+    # np.savetxt(basename+"_steps.txt", steps)
