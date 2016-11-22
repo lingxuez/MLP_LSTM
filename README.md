@@ -12,7 +12,7 @@ We use the following 5 DBPedia categories:
 
 > Person, Place, Organisation, Work, Species.
 
-Please see `run.sh` for how to run the code.
+Please use `run.sh` to run the code.
 
 ## Data
 
@@ -27,8 +27,8 @@ For example:
 > data/mydata.test
 
 Each data file contains two columns, separated by tab.
-The first column contains the title, a string without spaces
-The second column contains the label name, another string without spaces
+The first column contains the title, a string without spaces.
+The second column contains the label name, also a string without spaces.
 For example:
 
 > Lloyd_Stinson   Person
